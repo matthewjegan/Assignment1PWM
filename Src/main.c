@@ -1,5 +1,13 @@
 #include "stm32f30x_conf.h" // STM32 config
 #include "30010_io.h" // Input/output library for this course
+#include "stdio.h"
+#include "inttypes.h"
+
+/* SYMBOLIC CONSTANTS */
+#define CLK_FREQ	  64000000U
+#define TIM_PRESCALER 63U
+#define TIM_FREQ	  CLK_FREQ / (TIM_PRESCALER + 1)
+#define NUM_SAMPLES	  10U
 
 #define UP     1U
 #define DOWN   2U
@@ -7,6 +15,7 @@
 #define RIGHT  8U
 #define CENTRE 16U
 
+#define OFF		0b111
 #define RED     0b011
 #define GREEN   0b101
 #define BLUE    0b110
@@ -15,65 +24,49 @@
 #define MAGENTA 0b010
 #define WHITE   0b000
 
-void initInterrupts(void)
+/* TYPE DEFINITIONS */
+typedef struct
 {
-	// enable interrupts
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG,ENABLE);
-	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource5); // sets port B pin 5 to the IRQ
-	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource0); // sets port B pin 0 to the IRQ
+	uint8_t size;
+	uint32_t sampleArray[NUM_SAMPLES];
+} SampleBuffer_S;
 
-	// define and set setting for EXTI
-	EXTI_InitTypeDef EXTI_InitStructure;
-	EXTI_InitStructure.EXTI_Line = EXTI_Line5; // line 5 see [RM p. 215]
-	EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-	EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-	EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;
-	EXTI_Init(&EXTI_InitStructure);
+/* GLOBAL VARIABLES */
+volatile uint32_t ICValue1 = 0; // Period
+volatile uint32_t ICValue2 = 0;	// Duty Cycle
+volatile uint8_t  ICValid = 0;
 
-	EXTI_InitStructure.EXTI_Line = EXTI_Line0; // line 5 see [RM p. 215]
-	EXTI_Init(&EXTI_InitStructure);
+void initLed(void)
+{
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA,ENABLE); // Enable clock for GPIO Port A
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB,ENABLE); // Enable clock for GPIO Port B
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOC,ENABLE); // Enable clock for GPIO Port C
 
-	// setup NVIC
-	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0);
-	NVIC_InitTypeDef NVIC_InitStructure;
-	NVIC_InitStructure.NVIC_IRQChannel = EXTI9_5_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	NVIC_Init(&NVIC_InitStructure);
+	// PC0 Input
+	GPIO_InitTypeDef GPIO_InitStructAll; // Define typedef struct for setting pins
+	GPIO_StructInit(&GPIO_InitStructAll); // Initialize GPIO struct
+	GPIO_InitStructAll.GPIO_Mode = GPIO_Mode_OUT; // Set as input
+	GPIO_InitStructAll.GPIO_OType = GPIO_OType_PP; // Set as Push-Pull
+	GPIO_InitStructAll.GPIO_Speed = GPIO_Speed_2MHz; // Set speed to 2 MHz
 
-	NVIC_InitStructure.NVIC_IRQChannel = EXTI0_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
-	NVIC_Init(&NVIC_InitStructure);
+	// PB4 Output
+	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_4; // Set so the configuration is on pin B4
+	GPIO_Init(GPIOB, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
 
-	NVIC_EnableIRQ(EXTI9_5_IRQn); // Enable interrupt
-	NVIC_EnableIRQ(EXTI0_IRQn); // Enable interrupt
+	// PC7 Output
+	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_7; // Set so the configuration is on pin C7
+	GPIO_Init(GPIOC, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
+
+	// PA9 Input
+	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_9; // Set so the configuration is on pin A9
+	GPIO_Init(GPIOA, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
 }
 
-void EXTI9_5_IRQHandler(void){
-	if( EXTI_GetITStatus(EXTI_Line5) != RESET ){
-		printf("Right : %d | Up : %d | Center : %d | Left : %d | Down : %d\n",
-				GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_0),
-				GPIO_ReadInputDataBit(GPIOA,GPIO_Pin_4),
-				GPIO_ReadInputDataBit(GPIOB,GPIO_Pin_5),
-				GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_1),
-				GPIO_ReadInputDataBit(GPIOB,GPIO_Pin_0));
-
-		GPIO_WriteBit(GPIOB, GPIO_Pin_4, ((CYAN >> 2U) & 1U));
-		GPIO_WriteBit(GPIOC, GPIO_Pin_7, ((CYAN >> 1U) & 1U));
-		GPIO_WriteBit(GPIOA, GPIO_Pin_9, ((CYAN >> 0U) & 1U));
-
-		EXTI_ClearITPendingBit(EXTI_Line5);
-
-		printf("Interrupt Triggered PB5\n");
-	}
-}
-
-void EXTI0_IRQHandler(void){
-	// Do some important stuff here!...
-	printf("line 0 interrupt\n");
-	EXTI_ClearITPendingBit(EXTI_Line0);
+void setLed(uint8_t colour)
+{
+	GPIO_WriteBit(GPIOB, GPIO_Pin_4, ((colour >> 2U) & 1U));
+	GPIO_WriteBit(GPIOC, GPIO_Pin_7, ((colour >> 1U) & 1U));
+	GPIO_WriteBit(GPIOA, GPIO_Pin_9, ((colour >> 0U) & 1U));
 }
 
 void initJoystick(void)
@@ -107,67 +100,6 @@ void initJoystick(void)
 	GPIO_Init(GPIOB, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
 }
 
-void initLed(void)
-{
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA,ENABLE); // Enable clock for GPIO Port A
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB,ENABLE); // Enable clock for GPIO Port B
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOC,ENABLE); // Enable clock for GPIO Port C
-
-	// PC0 Input
-	GPIO_InitTypeDef GPIO_InitStructAll; // Define typedef struct for setting pins
-	GPIO_StructInit(&GPIO_InitStructAll); // Initialize GPIO struct
-	GPIO_InitStructAll.GPIO_Mode = GPIO_Mode_OUT; // Set as input
-	GPIO_InitStructAll.GPIO_OType = GPIO_OType_PP; // Set as Push-Pull
-	GPIO_InitStructAll.GPIO_Speed = GPIO_Speed_2MHz; // Set speed to 2 MHz
-
-	// PB4 Output
-	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_4; // Set so the configuration is on pin B4
-	GPIO_Init(GPIOB, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
-
-	// PC7 Output
-	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_7; // Set so the configuration is on pin C7
-	GPIO_Init(GPIOC, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
-
-	// PA9 Input
-	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_9; // Set so the configuration is on pin A9
-	GPIO_Init(GPIOA, &GPIO_InitStructAll); // Setup of GPIO with the settings chosen
-}
-
-void setLed(uint8_t state)
-{
-	uint8_t colour = 0U;
-
-	switch (state)
-	{
-		case (UP):
-			colour = RED;
-			break;
-
-		case (DOWN):
-			colour = GREEN;
-			break;
-
-		case (LEFT):
-			colour = BLUE;
-			break;
-
-		case (RIGHT):
-			colour = YELLOW;
-			break;
-
-		case (CENTRE):
-			colour = MAGENTA;
-			break;
-
-		default:
-			colour = WHITE;
-	}
-
-	GPIO_WriteBit(GPIOB, GPIO_Pin_4, ((colour >> 2U) & 1U));
-	GPIO_WriteBit(GPIOC, GPIO_Pin_7, ((colour >> 1U) & 1U));
-	GPIO_WriteBit(GPIOA, GPIO_Pin_9, ((colour >> 0U) & 1U));
-}
-
 uint8_t readJoystick(void)
 {
 	uint8_t up     = GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_4);
@@ -187,25 +119,174 @@ uint8_t readJoystick(void)
 	return joystickBits;
 }
 
+/* FUNCTION DEFINITIONS */
+void initTIM2(void)
+{
+	// Timer
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2,ENABLE);
+
+	TIM_TimeBaseInitTypeDef TIM_InitStructure;
+	TIM_TimeBaseStructInit(&TIM_InitStructure);
+	TIM_InitStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+	TIM_InitStructure.TIM_CounterMode = TIM_CounterMode_Up;
+	TIM_InitStructure.TIM_Prescaler = 63; // Scale counter freq to 1 MHz
+	TIM_InitStructure.TIM_Period = 0xFFFFFFFF; // Set auto-reload to maximum value
+	TIM_TimeBaseInit(TIM2,&TIM_InitStructure);
+
+	TIM_ICInitTypeDef TIM_ICInitStruct;
+	TIM_ICInitStruct.TIM_Channel = TIM_Channel_1;
+	TIM_ICInitStruct.TIM_ICPolarity = TIM_ICPolarity_Rising;
+	TIM_PWMIConfig(TIM2, &TIM_ICInitStruct);
+
+	TIM_ITConfig(TIM2, TIM_IT_CC1,ENABLE);
+	TIM_Cmd(TIM2,ENABLE);
+
+	// NVIC for timer
+	NVIC_InitTypeDef NVIC_InitStructure;
+	NVIC_InitStructure.NVIC_IRQChannel = TIM2_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+	NVIC_Init(&NVIC_InitStructure);
+	NVIC_SetPriority(TIM2_IRQn, 0); // Set interrupt priority interrupts
+	NVIC_EnableIRQ(TIM2_IRQn); // Enable interrupt
+}
+
+void GPIO_set_AF_PA0(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructAll;
+	GPIO_StructInit(&GPIO_InitStructAll);
+
+	// Configure Pin PA0 to Alternate Function Mode
+	GPIO_InitStructAll.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_InitStructAll.GPIO_Pin = GPIO_Pin_0;
+	GPIO_InitStructAll.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_InitStructAll.GPIO_Speed = GPIO_Speed_50MHz;
+
+	GPIO_Init(GPIOA, &GPIO_InitStructAll);
+	GPIO_PinAFConfig(GPIOA, GPIO_PinSource0, GPIO_AF_1); //Sets pin 0 at port A to alternative function 1
+}
+
+void TIM2_IRQHandler(void) {
+	// Clear Capture/Compare Interrupt Bit
+	TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
+	setLed(CYAN);
+
+	ICValue1 = TIM_GetCapture1(TIM2); // Period - Counts between rising edges
+	ICValue2 = TIM_GetCapture2(TIM2); // Duty/Width - Counts with input channel HI between rising edges
+	ICValid = 1;
+}
+
+uint64_t updateBufferAndGetOutput(SampleBuffer_S* buffer, uint32_t newSample)
+{
+	uint8_t bufferSize = buffer->size;
+
+	if (bufferSize < NUM_SAMPLES)
+	{
+		buffer->sampleArray[bufferSize] = newSample;
+		buffer->size++;
+	}
+	else
+	{
+		for (int i = 0; i < NUM_SAMPLES - 1; i++)
+		{
+			buffer->sampleArray[i] = buffer->sampleArray[i+1];
+		}
+
+		buffer->sampleArray[NUM_SAMPLES] = newSample;
+	}
+
+	uint32_t sum = 0;
+	for (int i = 0; i < buffer->size; i++)
+	{
+		sum += buffer->sampleArray[i];
+	}
+
+	return sum / buffer->size;
+}
+
 int main(void)
 {
 	uart_init( 9600 ); // Initialize USB serial at 9600 baud
+	GPIO_set_AF_PA0();
+	initTIM2();
 	initJoystick();
 	initLed();
-	initInterrupts();
 
-	uint8_t joystickState;
+	uint32_t inputFreq; // Input PWM frequency in Hz
+	uint32_t dutyCycle; // Input PWM duty cycle in %
+
+	uint8_t measurementEnabled = 1U;
+
+	SampleBuffer_S freqBuffer = {0, {}};
+	SampleBuffer_S dutyCycleBuffer = {0, {}};
+	uint32_t avgInputFreq;
+	uint32_t avgDutyCycle;
+
+	uint8_t lastJoystickState = 0U;
 
 	while(1)
 	{
-		uint8_t newJoystickState = readJoystick();
-
-		if (newJoystickState != joystickState)
+		uint8_t joystickState = readJoystick();
+		if (joystickState != lastJoystickState)
 		{
-			joystickState = newJoystickState;
-			printf("Joystick: %d\n", joystickState);
+			lastJoystickState = joystickState;
+
+			if (joystickState == CENTRE)
+			{
+				if (measurementEnabled == 1)
+				{
+					measurementEnabled = 0;
+				}
+				else
+				{
+					measurementEnabled = 1;
+				}
+			}
+			else if (joystickState == DOWN)
+			{
+				printf("Resetting Sample Buffers\n");
+				memset(freqBuffer.sampleArray, 0, sizeof(freqBuffer.sampleArray));
+				freqBuffer.size = 0;
+				memset(dutyCycleBuffer.sampleArray, 0, sizeof(dutyCycleBuffer.sampleArray));
+				dutyCycleBuffer.size = 0;
+			}
 		}
 
-		setLed(joystickState);
+		if (measurementEnabled == 1)
+		{
+			setLed(GREEN);
+
+			if (ICValid == 1)
+			{
+				if (ICValue1 > 0)
+				{
+					inputFreq = TIM_FREQ / ICValue1;
+					dutyCycle = (100 * ICValue2) / ICValue1;
+				}
+				else
+				{
+					inputFreq = 0;
+					dutyCycle = 0;
+				}
+
+				printf("Signal Frequency: %ld Hz\nDuty Cycle = %ld %%\n",
+					   (unsigned long) inputFreq,
+					   (unsigned long) dutyCycle);
+
+				avgInputFreq = updateBufferAndGetOutput(&freqBuffer, inputFreq);
+				avgDutyCycle = updateBufferAndGetOutput(&dutyCycleBuffer, dutyCycle);
+				ICValid = 0;
+
+				printf("Avg Signal Frequency: %ld Hz\nAvg Duty Cycle = %ld %%\n",
+								   (unsigned long) avgInputFreq,
+								   (unsigned long) avgDutyCycle);
+
+			}
+		}
+		else
+		{
+			setLed(RED);
+		}
 	}
 }
