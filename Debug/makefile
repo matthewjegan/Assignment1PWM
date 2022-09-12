@@ -35,34 +35,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := Assignment1Project
+BUILD_ARTIFACT_NAME := Assignment1PWM
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX := 
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME).$(BUILD_ARTIFACT_EXTENSION)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-Assignment1Project.elf \
+Assignment1PWM.elf \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-Assignment1Project.list \
+Assignment1PWM.list \
 
 OBJCOPY_BIN += \
-Assignment1Project.bin \
+Assignment1PWM.bin \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: Assignment1Project.elf secondary-outputs
+main-build: Assignment1PWM.elf secondary-outputs
 
 # Tool invocations
-Assignment1Project.elf: $(OBJS) $(USER_OBJS) C:/Users/matth/Documents/DTU/30021\ -\ Digital\ Instrumentation/Assignment1Project/STM32F302R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Assignment1Project.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:/Users/matth/Documents/DTU/30021 - Digital Instrumentation/Assignment1Project/STM32F302R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Assignment1Project.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Assignment1PWM.elf: $(OBJS) $(USER_OBJS) C:/Users/matth/Documents/DTU/30021\ -\ Digital\ Instrumentation/Assignment1PWM/STM32F302R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Assignment1PWM.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:/Users/matth/Documents/DTU/30021 - Digital Instrumentation/Assignment1PWM/STM32F302R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Assignment1PWM.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -71,13 +71,13 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-Assignment1Project.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "Assignment1Project.list"
+Assignment1PWM.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "Assignment1PWM.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
-Assignment1Project.bin: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objcopy  -O binary $(EXECUTABLES) "Assignment1Project.bin"
+Assignment1PWM.bin: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objcopy  -O binary $(EXECUTABLES) "Assignment1PWM.bin"
 	@echo 'Finished building: $@'
 	@echo ' '
 
